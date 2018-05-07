@@ -4,7 +4,7 @@ welche sich zueinander verdrehen (und verschieben, welches aber durch
 Verdehungen abgebildet werden kann).
 """
 import numpy as np
-# import matplotlib as plt
+import matplotlib.pyplot as plt
 
 """
 Funktionsdeklarationen:
@@ -13,19 +13,10 @@ Funktionsdeklarationen:
 
 def get_distance(x_a, x_b):
     x_ab = x_a - x_b
+    print(str(x_ab))
     dist = ((x_ab[0][0])**2 + (x_ab[1][0])**2)**0.5
     return dist
 
-
-"""
-Ist das Modell nicht fuer Bereiche von Millimetern geeignet?! ---???---
-"""
-
-"""
-
-TEST
-
-"""
 
 def h_rss(x_pos_mobil, x_pos_stat, alpha, gamma):
     r = get_distance(x_pos_mobil, x_pos_stat)
@@ -42,6 +33,7 @@ def h_rss_only(x_pos_mobil, x_pos_stat, alpha, gamma):
 def h_rss_jacobi(x_pos_mobil, x_pos_stat, alpha):
     r = get_distance(x_pos_mobil, x_pos_stat)
     h_rss_jacobimatrix = np.empty([2, 1])
+    print(str(r))
     h_rss_jacobimatrix[0] = -20*(x_pos_mobil[0]-x_pos_stat[0])/(np.log(10)*r**2)-alpha*(x_pos_mobil[0]-x_pos_stat[0])/r
     h_rss_jacobimatrix[1] = -20*(x_pos_mobil[1]-x_pos_stat[1])/(np.log(10)*r**2)-alpha*(x_pos_mobil[1]-x_pos_stat[1])/r
     return h_rss_jacobimatrix
@@ -70,7 +62,6 @@ def measurement_covariance_model(rss_noise_model, r_dist):
 def ekf_prediction(x_est, p_mat, q_mat):
     x_est = x_est  # + np.random.randn(2, 1) * 1  # = I * x_est
     p_mat = i_mat.dot(p_mat.dot(i_mat)) + q_mat  # Theoretisch mit .T transponierten zweiten I Matrix
-    '''Warum ueberhaupt die Multip. mit  Einheitsmatrix? Ist f(x) = u(x) im Prinzip? ---???---'''
     return x_est, p_mat
 
 
@@ -78,14 +69,12 @@ def ekf_update(x_nk, tx_pos, tx_alpha, tx_gamma, x_est, p_mat):
     rss = np.empty(tx_num)
     for i in range(tx_num):
         rss[i] = h_rss_only(x_nk, tx_pos[i], tx_alpha[i], tx_gamma[i])
-    '''So richtig fuer emulation der Messung? Ghetto-Programmierung: geht auch anders/besser? ---???---'''
+    ''' Ausserhalb der Funktion besser fuer direkte Uebertragung auf Boot '''
     z_meas = rss
     for itx in range(tx_num):
         y_est, r_dist = h_rss(x_est, tx_pos[itx], tx_alpha[itx], tx_gamma[itx])
         y_tild = z_meas[itx] - y_est
-        '''Wofuer steht "y_tild"? y_diff? ---???---'''
         r_mat = measurement_covariance_model(z_meas[itx], r_dist)
-        '''Warum hat measurement_covariance_model in original eine "itx" input? ---???---'''
         h_jac_mat = h_rss_jacobi(x_est, tx_pos[itx], tx_alpha[itx])
         s_mat = np.dot(h_jac_mat.T, np.dot(p_mat, h_jac_mat)) + r_mat
         k_mat = np.dot(p_mat, (h_jac_mat / s_mat))
@@ -100,7 +89,7 @@ Ausfuehrendes Programm:
 
 '''Konfiguration der Anzahl der Messpunkte'''
 anz_messpunkte = 10
-dist_messpunkte = 10.0
+dist_messpunkte = 100.0
 start_messpunkte = 200.0
 
 '''Bestimmung der Messfrequenzen'''
@@ -129,7 +118,6 @@ y_est = np.zeros(tx_num)
 
 '''Initialisierung der F-Matrix -> Gradient von f(x)'''
 i_mat = np.eye(2)
-"""Einheitsmatrix da sich Boot theoretisch nicht bewegt ---???---"""
 
 '''Initialisierung der Distanzspeicherungsmatrix'''
 r_dist = np.zeros(tx_num)
@@ -138,16 +126,36 @@ r_dist = np.zeros(tx_num)
 z_meas = np.zeros(tx_num)
 
 '''Initialisierung der geschaetzten Position'''
-x_est = np.array([[100.0], [0.0]])
+x_est = np.array([[100.0], [100.0]])
+
+'''Initialisierung der Listen fuer Plots'''
+x_n_list = [x_n]
+x_est_list = [x_est]
 
 for k in range(anz_messpunkte):
     print "\n \n \nDurchlauf Nummer", k
+
     x_est, p_mat = ekf_prediction(x_est, p_mat, q_mat)
     x_est, p_mat = ekf_update(x_n, tx_pos, tx_alpha, tx_gamma, x_est, p_mat)
+
     print "Die wirkliche Position ist: \n", x_n
     print "Die geschaetzte Position ist: \n", x_est
     print "( Die p-Matrix entspricht: \n", p_mat, ")"
 
+    x_n_list.append(x_n)
+    x_est_list.append(x_est)
+
     x_n = x_n + [[dist_messpunkte],[0.0]]
 
 print('Fertich!')
+
+plt.figure(figsize = (20,15))
+for i in range(0, (anz_messpunkte + 1)):
+    plt.scatter(x_n_list[i][0], x_n_list[i][1], marker="^", c='b', s=100)
+    plt.scatter(x_est_list[i][0], x_est_list[i][1],  marker="o", c='r', s=100)
+plt.xlabel('X - Achse', fontsize = 20)
+plt.ylabel('Y - Achse', fontsize = 20)
+plt.grid()
+plt.legend(['Wahre Position', 'Geschaetzte Position'], loc=0)
+plt.title('Plot der wahren und geschaetzten Punkte', fontsize = 25)
+plt.show()
