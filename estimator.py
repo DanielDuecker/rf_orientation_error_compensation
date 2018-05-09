@@ -11,26 +11,32 @@ Funktionsdeklarationen:
 """
 
 
-def get_distance(x_a, x_b):
+def get_distance_2D(x_a, x_b):
     x_ab = x_a - x_b
     dist = ((x_ab[0][0])**2 + (x_ab[1][0])**2)**0.5
     return dist
 
 
+def get_distance_1D(x_a, x_b):
+    x_ab = x_a - x_b
+    dist = (x_ab**2 + x_ab**2)**0.5
+    return dist
+
+
 def h_rss(x_pos_mobil, x_pos_stat, alpha, gamma):
-    r = get_distance(x_pos_mobil, x_pos_stat)
+    r = get_distance_2D(x_pos_mobil, x_pos_stat)
     rss = -20*np.log10(r)-r*alpha+gamma
     return rss, r
 
 
 def h_rss_only(x_pos_mobil, x_pos_stat, alpha, gamma):
-    r = get_distance(x_pos_mobil, x_pos_stat)
+    r = get_distance_2D(x_pos_mobil, x_pos_stat)
     rss = -20*np.log10(r)-r*alpha+gamma
     return rss
 
 
 def h_rss_jacobi(x_pos_mobil, x_pos_stat, alpha):
-    r = get_distance(x_pos_mobil, x_pos_stat)
+    r = get_distance_2D(x_pos_mobil, x_pos_stat)
     h_rss_jacobimatrix = np.empty([2, 1])
     h_rss_jacobimatrix[0] = -20*(x_pos_mobil[0]-x_pos_stat[0])/(np.log(10)*r**2)-alpha*(x_pos_mobil[0]-x_pos_stat[0])/r
     h_rss_jacobimatrix[1] = -20*(x_pos_mobil[1]-x_pos_stat[1])/(np.log(10)*r**2)-alpha*(x_pos_mobil[1]-x_pos_stat[1])/r
@@ -63,7 +69,7 @@ def ekf_prediction(x_est, p_mat, q_mat):
     return x_est, p_mat
 
 
-def ekf_update(x_nk, rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat):
+def ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat):
     z_meas = rss
     for itx in range(tx_num):
         y_est, r_dist = h_rss(x_est, tx_pos[itx], tx_alpha[itx], tx_gamma[itx])
@@ -83,20 +89,20 @@ Ausfuehrendes Programm:
 
 '''Konfiguration der Anzahl der Messpunkte'''
 
-dist_messpunkte = 20.0
-start_messpunkte = np.array([[200.0], [0.0]])
+dist_messpunkte = 100.0
+start_messpunkte = np.array([[0.0], [0.0]])
 
 x_n = [start_messpunkte]
-while (x_n[-1][0] < 1000.0):
+while x_n[-1][0] < 1000.0:
     start_messpunkte = start_messpunkte + np.array([[dist_messpunkte], [0.0]])
     x_n.append(start_messpunkte)
-while (x_n[-1][1] < 1000.0):
+while x_n[-1][1] < 1000.0:
     start_messpunkte = start_messpunkte + np.array([[0.0], [dist_messpunkte]])
     x_n.append(start_messpunkte)
-while (x_n[-1][0] > 0.0):
+while x_n[-1][0] > 0.0:
     start_messpunkte = start_messpunkte + np.array([[-dist_messpunkte], [0.0]])
     x_n.append(start_messpunkte)
-while (x_n[-1][1] > 0.0):
+while x_n[-1][1] > 0.0:
     start_messpunkte = start_messpunkte + np.array([[0.0], [-dist_messpunkte]])
     x_n.append(start_messpunkte)
 anz_messpunkte = len(x_n)
@@ -109,8 +115,8 @@ tx_num = len(tx_freq)
 # x_n = np.array([[start_messpunkte], [0.0]])
 
 '''Postion(en) der stationaeren Antenne(n)'''
-tx_pos = [np.array([[0.9],[-500.9]]), np.array([[500.9],[-500.9]]), np.array([[1000.9],[-500.9]]),
-          np.array([[0.9],[500.9]]), np.array([[500.9],[500.9]]), np.array([[1000.9],[500.9]])]
+tx_pos = [np.array([[-100.9], [-100.9]]), np.array([[500.9], [-100.9]]), np.array([[1100.9], [-100.9]]),
+          np.array([[-100.9], [1100.9]]), np.array([[500.9], [1100.9]]), np.array([[1100.9], [1100.9]])]
 
 '''Kennwerte der stationaeren Antenne(n)'''
 tx_alpha = np.array([0.01110, 0.01401, 0.01187, 0.01322, 0.01021, 0.01028])
@@ -148,7 +154,7 @@ for k in range(anz_messpunkte):
         rss[i] = h_rss_only(x_n[k], tx_pos[i], tx_alpha[i], tx_gamma[i])
 
     x_est, p_mat = ekf_prediction(x_est, p_mat, q_mat)
-    x_est, p_mat = ekf_update(x_n[k], rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat)
+    x_est, p_mat = ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat)
 
     print "Die wirkliche Position ist: \n", x_n[k]
     print "Die geschaetzte Position ist: \n", x_est
@@ -156,26 +162,72 @@ for k in range(anz_messpunkte):
 
     x_est_list.append(x_est)
 
-print('Fertich!')
+print('\nFertich!\n')
 
-plt.figure(figsize = (12,12))
-plt.scatter(x_n[i][0], x_n[i][1], marker="^", c='c', s=100)
-plt.scatter(x_est_list[0][0], x_est_list[0][1], marker="o", c='r', s=100)
-plt.scatter(tx_pos[0][0], tx_pos[0][1], marker="*", c='k', s=100)
-for i in range(1, anz_messpunkte):
-    plt.scatter(x_n[i][0], x_n[i][1], marker="^", c='c', s=100)
-    plt.scatter(x_est_list[i][0], x_est_list[i][1], marker="o", c='r', s=100)
-plt.scatter(x_est_list[-1][0], x_est_list[-1][1], marker="o", c='r', s=100)
-for i in range(1, tx_num):
-    plt.scatter(tx_pos[i][0], tx_pos[i][1], marker="*", c='k', s=100)
-xmin = -600
-xmax = 1100
-ymin = -600
-ymax = 1100
-plt.axis([xmin,xmax,ymin,ymax])
+'''Erstellung der X und Y Koordinatenlisten zum einfachen und effizienteren Plotten'''
+x_n_x = [None]*len(x_n)
+x_n_y = [None]*len(x_n)
+x_est_x = [None]*len(x_est_list)
+x_est_y = [None]*len(x_est_list)
+tx_pos_x = [None]*len(tx_pos)
+tx_pos_y = [None]*len(tx_pos)
+
+for i in range(0, len(x_n)):
+    x_n_x[i] = x_n[i][0]
+    x_n_y[i] = x_n[i][1]
+for i in range(0, len(x_est_list)):
+    x_est_x[i] = x_est_list[i][0]
+    x_est_y[i] = x_est_list[i][1]
+for i in range(0, len(tx_pos)):
+    tx_pos_x[i] = tx_pos[i][0]
+    tx_pos_y[i] = tx_pos[i][1]
+
+'''Strecke im Scatterplot'''
+plt.figure(figsize=(12, 12))
+plt.scatter(x_n_x, x_n_y, marker="^", c='c', s=100)
+plt.scatter(x_est_x, x_est_y, marker="o", c='r', s=100)
+plt.scatter(tx_pos_x, tx_pos_y, marker="*", c='k', s=100)
+print (min(x_n_x), min(x_est_x), min(tx_pos_x))
+xmin = min([min(x_n_x), min(x_est_x), min(tx_pos_x)]) - 100
+xmax = max([max(x_n_x), max(x_est_x), max(tx_pos_x)]) + 100
+ymin = min([min(x_n_y), min(x_est_y), min(tx_pos_y)]) - 200
+ymax = max([max(x_n_y), max(x_est_y), max(tx_pos_y)]) + 100
+plt.axis([xmin, xmax, ymin, ymax])
 plt.xlabel('X - Achse', fontsize=20)
 plt.ylabel('Y - Achse', fontsize=20)
 plt.grid()
-plt.legend(['Wahre Position', 'Geschaetzte Position', 'Transmitter Antennen'], loc=3) # best:0, or=1, ol=2, ul=3, ur=4
+plt.legend(['Wahre Position', 'Geschaetzte Position', 'Transmitter Antennen'], loc=3)  # best:0, or=1, ol=2, ul=3, ur=4
 plt.title('Plot der wahren und geschaetzten Punkte', fontsize=25)
 plt.show()
+
+'''Strecke im Linienplot'''
+x_est_fehler = [None]*len((x_est_x))
+for i in range(len(x_est_x)):
+    x_est_fehler[i] = get_distance_1D(x_est_x[i], x_est_y[i])
+plt.figure(figsize=(12, 12))
+plt.subplot(211)
+plt.plot(range(1, (len(x_n)+1)), x_n_x)
+plt.plot(x_est_x)
+plt.plot(range(1, (len(x_n)+1)), x_n_y)
+plt.plot(x_est_y)
+plt.xlabel('Messungsnummer', fontsize=20)
+plt.ylabel('Koordinate', fontsize=20)
+plt.legend(['Wahre Position X-Koordinate', 'Geschaetzte X-Koordinate', 'Wahre Position Y-Koordinate', 'Geschaetzte Y-Korrdinate'], loc=0)
+plt.subplot(212)
+x_est_fehler = [None]*len((x_est_x))
+for i in range(1, len(x_n_x)):
+    x_est_fehler[i] = get_distance_1D(x_est_x[i], x_n_x[i-1])
+plt.plot(x_est_fehler)
+for i in range(1, len(x_n_y)):
+    x_est_fehler[i] = get_distance_1D(x_est_y[i], x_n_y[i-1])
+plt.plot(x_est_fehler)
+for i in range(1, len(x_est_list)):
+    x_est_fehler[i] = get_distance_2D(x_est_list[i], x_n[i-1])
+plt.plot(x_est_fehler)
+plt.xlabel('Messungsnummer', fontsize=20)
+plt.ylabel('Fehler', fontsize=20)
+plt.legend(['Fehler X-Koordinate', 'Fehler Y-Koordinate', '(Gesamt-) Abstandsfehler'], loc=0) # FHELER IM GESAMTABSTAND!
+plt.show()
+
+
+
