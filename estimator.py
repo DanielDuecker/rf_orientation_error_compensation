@@ -13,7 +13,6 @@ Funktionsdeklarationen:
 
 def get_distance(x_a, x_b):
     x_ab = x_a - x_b
-    print(str(x_ab))
     dist = ((x_ab[0][0])**2 + (x_ab[1][0])**2)**0.5
     return dist
 
@@ -33,7 +32,6 @@ def h_rss_only(x_pos_mobil, x_pos_stat, alpha, gamma):
 def h_rss_jacobi(x_pos_mobil, x_pos_stat, alpha):
     r = get_distance(x_pos_mobil, x_pos_stat)
     h_rss_jacobimatrix = np.empty([2, 1])
-    print(str(r))
     h_rss_jacobimatrix[0] = -20*(x_pos_mobil[0]-x_pos_stat[0])/(np.log(10)*r**2)-alpha*(x_pos_mobil[0]-x_pos_stat[0])/r
     h_rss_jacobimatrix[1] = -20*(x_pos_mobil[1]-x_pos_stat[1])/(np.log(10)*r**2)-alpha*(x_pos_mobil[1]-x_pos_stat[1])/r
     return h_rss_jacobimatrix
@@ -65,11 +63,7 @@ def ekf_prediction(x_est, p_mat, q_mat):
     return x_est, p_mat
 
 
-def ekf_update(x_nk, tx_pos, tx_alpha, tx_gamma, x_est, p_mat):
-    rss = np.empty(tx_num)
-    for i in range(tx_num):
-        rss[i] = h_rss_only(x_nk, tx_pos[i], tx_alpha[i], tx_gamma[i])
-    ''' Ausserhalb der Funktion besser fuer direkte Uebertragung auf Boot '''
+def ekf_update(x_nk, rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat):
     z_meas = rss
     for itx in range(tx_num):
         y_est, r_dist = h_rss(x_est, tx_pos[itx], tx_alpha[itx], tx_gamma[itx])
@@ -88,20 +82,35 @@ Ausfuehrendes Programm:
 """
 
 '''Konfiguration der Anzahl der Messpunkte'''
-anz_messpunkte = 10
-dist_messpunkte = 100.0
-start_messpunkte = 200.0
+
+dist_messpunkte = 20.0
+start_messpunkte = np.array([[200.0], [0.0]])
+
+x_n = [start_messpunkte]
+while (x_n[-1][0] < 1000.0):
+    start_messpunkte = start_messpunkte + np.array([[dist_messpunkte], [0.0]])
+    x_n.append(start_messpunkte)
+while (x_n[-1][1] < 1000.0):
+    start_messpunkte = start_messpunkte + np.array([[0.0], [dist_messpunkte]])
+    x_n.append(start_messpunkte)
+while (x_n[-1][0] > 0.0):
+    start_messpunkte = start_messpunkte + np.array([[-dist_messpunkte], [0.0]])
+    x_n.append(start_messpunkte)
+while (x_n[-1][1] > 0.0):
+    start_messpunkte = start_messpunkte + np.array([[0.0], [-dist_messpunkte]])
+    x_n.append(start_messpunkte)
+anz_messpunkte = len(x_n)
 
 '''Bestimmung der Messfrequenzen'''
 tx_freq = [4.3400e+08, 4.341e+08, 4.3430e+08, 4.3445e+08, 4.3465e+08, 4.3390e+08]
 tx_num = len(tx_freq)
 
 '''Positionen der mobilen Antenne (x,y)'''
-x_n = np.array([[start_messpunkte], [0.0]])
+# x_n = np.array([[start_messpunkte], [0.0]])
 
 '''Postion(en) der stationaeren Antenne(n)'''
-tx_pos = [np.array([[0.0],[0.0]]), np.array([[500.0],[0.0]]), np.array([[1000.0],[0.0]]),
-          np.array([[0.0],[500.0]]), np.array([[500.0],[500.0]]), np.array([[1000.0],[500.0]])]
+tx_pos = [np.array([[0.9],[-500.9]]), np.array([[500.9],[-500.9]]), np.array([[1000.9],[-500.9]]),
+          np.array([[0.9],[500.9]]), np.array([[500.9],[500.9]]), np.array([[1000.9],[500.9]])]
 
 '''Kennwerte der stationaeren Antenne(n)'''
 tx_alpha = np.array([0.01110, 0.01401, 0.01187, 0.01322, 0.01021, 0.01028])
@@ -126,36 +135,47 @@ r_dist = np.zeros(tx_num)
 z_meas = np.zeros(tx_num)
 
 '''Initialisierung der geschaetzten Position'''
-x_est = np.array([[100.0], [100.0]])
+x_est = np.array([[500.0], [500.0]])
 
-'''Initialisierung der Listen fuer Plots'''
-x_n_list = [x_n]
+'''Initialisierung der Liste(n) fuer Plots'''
 x_est_list = [x_est]
 
 for k in range(anz_messpunkte):
     print "\n \n \nDurchlauf Nummer", k
 
-    x_est, p_mat = ekf_prediction(x_est, p_mat, q_mat)
-    x_est, p_mat = ekf_update(x_n, tx_pos, tx_alpha, tx_gamma, x_est, p_mat)
+    rss = np.empty(tx_num)
+    for i in range(tx_num):
+        rss[i] = h_rss_only(x_n[k], tx_pos[i], tx_alpha[i], tx_gamma[i])
 
-    print "Die wirkliche Position ist: \n", x_n
+    x_est, p_mat = ekf_prediction(x_est, p_mat, q_mat)
+    x_est, p_mat = ekf_update(x_n[k], rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat)
+
+    print "Die wirkliche Position ist: \n", x_n[k]
     print "Die geschaetzte Position ist: \n", x_est
     print "( Die p-Matrix entspricht: \n", p_mat, ")"
 
-    x_n_list.append(x_n)
     x_est_list.append(x_est)
-
-    x_n = x_n + [[dist_messpunkte],[0.0]]
 
 print('Fertich!')
 
-plt.figure(figsize = (20,15))
-for i in range(0, (anz_messpunkte + 1)):
-    plt.scatter(x_n_list[i][0], x_n_list[i][1], marker="^", c='b', s=100)
-    plt.scatter(x_est_list[i][0], x_est_list[i][1],  marker="o", c='r', s=100)
-plt.xlabel('X - Achse', fontsize = 20)
-plt.ylabel('Y - Achse', fontsize = 20)
+plt.figure(figsize = (12,12))
+plt.scatter(x_n[i][0], x_n[i][1], marker="^", c='c', s=100)
+plt.scatter(x_est_list[0][0], x_est_list[0][1], marker="o", c='r', s=100)
+plt.scatter(tx_pos[0][0], tx_pos[0][1], marker="*", c='k', s=100)
+for i in range(1, anz_messpunkte):
+    plt.scatter(x_n[i][0], x_n[i][1], marker="^", c='c', s=100)
+    plt.scatter(x_est_list[i][0], x_est_list[i][1], marker="o", c='r', s=100)
+plt.scatter(x_est_list[-1][0], x_est_list[-1][1], marker="o", c='r', s=100)
+for i in range(1, tx_num):
+    plt.scatter(tx_pos[i][0], tx_pos[i][1], marker="*", c='k', s=100)
+xmin = -600
+xmax = 1100
+ymin = -600
+ymax = 1100
+plt.axis([xmin,xmax,ymin,ymax])
+plt.xlabel('X - Achse', fontsize=20)
+plt.ylabel('Y - Achse', fontsize=20)
 plt.grid()
-plt.legend(['Wahre Position', 'Geschaetzte Position'], loc=0)
-plt.title('Plot der wahren und geschaetzten Punkte', fontsize = 25)
+plt.legend(['Wahre Position', 'Geschaetzte Position', 'Transmitter Antennen'], loc=3) # best:0, or=1, ol=2, ul=3, ur=4
+plt.title('Plot der wahren und geschaetzten Punkte', fontsize=25)
 plt.show()
