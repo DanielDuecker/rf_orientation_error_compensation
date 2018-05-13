@@ -18,8 +18,7 @@ def get_distance_2D(x_a, x_b):
 
 
 def get_distance_1D(x_a, x_b):
-    x_ab = x_a - x_b
-    dist = (x_ab**2 + x_ab**2)**0.5
+    dist = abs(x_a - x_b)
     return dist
 
 
@@ -87,9 +86,8 @@ def ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat):
 Ausfuehrendes Programm:
 """
 
-'''Konfiguration der Anzahl der Messpunkte'''
-
-dist_messpunkte = 100.0
+'''Konfiguration der Messpunkte'''
+dist_messpunkte = 25.0
 start_messpunkte = np.array([[0.0], [0.0]])
 
 x_n = [start_messpunkte]
@@ -107,12 +105,12 @@ while x_n[-1][1] > 0.0:
     x_n.append(start_messpunkte)
 anz_messpunkte = len(x_n)
 
+'''Konfiguration der Winkel'''
+
+
 '''Bestimmung der Messfrequenzen'''
 tx_freq = [4.3400e+08, 4.341e+08, 4.3430e+08, 4.3445e+08, 4.3465e+08, 4.3390e+08]
 tx_num = len(tx_freq)
-
-'''Positionen der mobilen Antenne (x,y)'''
-# x_n = np.array([[start_messpunkte], [0.0]])
 
 '''Postion(en) der stationaeren Antenne(n)'''
 tx_pos = [np.array([[-100.9], [-100.9]]), np.array([[500.9], [-100.9]]), np.array([[1100.9], [-100.9]]),
@@ -121,6 +119,9 @@ tx_pos = [np.array([[-100.9], [-100.9]]), np.array([[500.9], [-100.9]]), np.arra
 '''Kennwerte der stationaeren Antenne(n)'''
 tx_alpha = np.array([0.01110, 0.01401, 0.01187, 0.01322, 0.01021, 0.01028])
 tx_gamma = np.array([-0.49471, -1.24823, -0.17291, -0.61587, 0.99831, 0.85711])
+
+'''Kennwerte der Rauschenden Abweichungen der Antennen'''
+tx_sigma = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
 
 '''Initialisierung der P-Matrix (Varianz der Position)'''
 p_mat = np.array([[100**2, 0], [0, 100**2]])  # Abweichungen von x1 und x2 aufgrund der Messungen...
@@ -151,8 +152,9 @@ for k in range(anz_messpunkte):
 
     rss = np.empty(tx_num)
     for i in range(tx_num):
-        rss[i] = h_rss_only(x_n[k], tx_pos[i], tx_alpha[i], tx_gamma[i])
-
+        rss[i] = h_rss_only(x_n[k], tx_pos[i], tx_alpha[i], tx_gamma[i]) + np.random.randn(1)*tx_sigma[i]
+    if k == 15:
+        print("RSS:", rss)
     x_est, p_mat = ekf_prediction(x_est, p_mat, q_mat)
     x_est, p_mat = ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat)
 
@@ -183,11 +185,11 @@ for i in range(0, len(tx_pos)):
     tx_pos_y[i] = tx_pos[i][1]
 
 '''Strecke im Scatterplot'''
-plt.figure(figsize=(12, 12))
+plt.figure(figsize=(25, 12))
+plt.subplot(121)
 plt.scatter(x_n_x, x_n_y, marker="^", c='c', s=100)
 plt.scatter(x_est_x, x_est_y, marker="o", c='r', s=100)
 plt.scatter(tx_pos_x, tx_pos_y, marker="*", c='k', s=100)
-print (min(x_n_x), min(x_est_x), min(tx_pos_x))
 xmin = min([min(x_n_x), min(x_est_x), min(tx_pos_x)]) - 100
 xmax = max([max(x_n_x), max(x_est_x), max(tx_pos_x)]) + 100
 ymin = min([min(x_n_y), min(x_est_y), min(tx_pos_y)]) - 200
@@ -198,22 +200,23 @@ plt.ylabel('Y - Achse', fontsize=20)
 plt.grid()
 plt.legend(['Wahre Position', 'Geschaetzte Position', 'Transmitter Antennen'], loc=3)  # best:0, or=1, ol=2, ul=3, ur=4
 plt.title('Plot der wahren und geschaetzten Punkte', fontsize=25)
-plt.show()
+# plt.show()
 
 '''Strecke im Linienplot'''
 x_est_fehler = [None]*len((x_est_x))
 for i in range(len(x_est_x)):
     x_est_fehler[i] = get_distance_1D(x_est_x[i], x_est_y[i])
-plt.figure(figsize=(12, 12))
-plt.subplot(211)
+# plt.figure(figsize=(12, 12))
+plt.subplot(222)
 plt.plot(range(1, (len(x_n)+1)), x_n_x)
 plt.plot(x_est_x)
 plt.plot(range(1, (len(x_n)+1)), x_n_y)
 plt.plot(x_est_y)
 plt.xlabel('Messungsnummer', fontsize=20)
 plt.ylabel('Koordinate', fontsize=20)
-plt.legend(['Wahre Position X-Koordinate', 'Geschaetzte X-Koordinate', 'Wahre Position Y-Koordinate', 'Geschaetzte Y-Korrdinate'], loc=0)
-plt.subplot(212)
+plt.legend(['Wahre Position X-Koordinate', 'Geschaetzte X-Koordinate',
+            'Wahre Position Y-Koordinate', 'Geschaetzte Y-Korrdinate'], loc=0)
+plt.subplot(224)
 x_est_fehler = [None]*len((x_est_x))
 for i in range(1, len(x_n_x)):
     x_est_fehler[i] = get_distance_1D(x_est_x[i], x_n_x[i-1])
@@ -226,8 +229,5 @@ for i in range(1, len(x_est_list)):
 plt.plot(x_est_fehler)
 plt.xlabel('Messungsnummer', fontsize=20)
 plt.ylabel('Fehler', fontsize=20)
-plt.legend(['Fehler X-Koordinate', 'Fehler Y-Koordinate', '(Gesamt-) Abstandsfehler'], loc=0) # FHELER IM GESAMTABSTAND!
+plt.legend(['Fehler X-Koordinate', 'Fehler Y-Koordinate', '(Gesamt-) Abstandsfehler'], loc=0)
 plt.show()
-
-
-
