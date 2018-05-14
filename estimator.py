@@ -42,22 +42,22 @@ def h_rss_jacobi(x_pos_mobil, x_pos_stat, alpha):
     return h_rss_jacobimatrix
 
 
-def measurement_covariance_model(rss_noise_model, r_dist):
+def measurement_covariance_model(rss_noise_model, r_dist, ekf_param_Xtra):
     ekf_param = [6.5411, 7.5723, 9.5922, 11.8720, 21.6396, 53.6692, 52.0241]
-    r_sig = 50.0  # default (Fuer RSS zwischen -35 und -55 z.Z.)
+    r_sig = 50.0 + ekf_param_Xtra  # default (Fuer RSS zwischen -35 und -55 z.Z.)
     if -35 < rss_noise_model or r_dist >= 1900:
-        r_sig = 100
+        r_sig = 100  + ekf_param_Xtra
     else:
         if rss_noise_model >= -55:
-            r_sig = ekf_param[0]
+            r_sig = ekf_param[0] + ekf_param_Xtra
         elif rss_noise_model < -80:
-            r_sig = ekf_param[4]
+            r_sig = ekf_param[4] + ekf_param_Xtra
         elif rss_noise_model < -75:
-            r_sig = ekf_param[3]
+            r_sig = ekf_param[3] + ekf_param_Xtra
         elif rss_noise_model < -65:
-            r_sig = ekf_param[2]
+            r_sig = ekf_param[2] + ekf_param_Xtra
         elif rss_noise_model < -55:
-            r_sig = ekf_param[1]
+            r_sig = ekf_param[1] + ekf_param_Xtra
     r_mat = r_sig ** 2
     return r_mat
 
@@ -68,12 +68,12 @@ def ekf_prediction(x_est, p_mat, q_mat):
     return x_est, p_mat
 
 
-def ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat):
+def ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra):
     z_meas = rss
     for itx in range(tx_num):
         y_est, r_dist = h_rss(x_est, tx_pos[itx], tx_alpha[itx], tx_gamma[itx])
         y_tild = z_meas[itx] - y_est
-        r_mat = measurement_covariance_model(z_meas[itx], r_dist)
+        r_mat = measurement_covariance_model(z_meas[itx], r_dist, ekf_param_Xtra)
         h_jac_mat = h_rss_jacobi(x_est, tx_pos[itx], tx_alpha[itx])
         s_mat = np.dot(h_jac_mat.T, np.dot(p_mat, h_jac_mat)) + r_mat
         k_mat = np.dot(p_mat, (h_jac_mat / s_mat))
@@ -85,6 +85,8 @@ def ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat):
 """
 Ausfuehrendes Programm:
 """
+
+np.random.seed(1281996)
 
 '''Konfiguration der Messpunkte'''
 dist_messpunkte = 25.0
@@ -121,7 +123,10 @@ tx_alpha = np.array([0.01110, 0.01401, 0.01187, 0.01322, 0.01021, 0.01028])
 tx_gamma = np.array([-0.49471, -1.24823, -0.17291, -0.61587, 0.99831, 0.85711])
 
 '''Kennwerte der Rauschenden Abweichungen der Antennen'''
-tx_sigma = np.array([0.2, 0.2, 0.2, 0.2, 0.2, 0.2])
+tx_sigma = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+
+'''Extra Unsicherheit fuer R-Matrix'''
+ekf_param_Xtra = 0
 
 '''Initialisierung der P-Matrix (Varianz der Position)'''
 p_mat = np.array([[100**2, 0], [0, 100**2]])  # Abweichungen von x1 und x2 aufgrund der Messungen...
@@ -132,7 +137,7 @@ q_mat = np.array([[500**2, 0], [0, 500**2]])  # Abweichungen von x1 und x2 aufgr
 '''Initialisierung der y-Matrix fuer die erwartete Messung'''
 y_est = np.zeros(tx_num)
 
-'''Initialisierung der F-Matrix -> Gradient von f(x)'''
+'''Initialisierung der F-Matrix -> Gradienten von f(x)'''
 i_mat = np.eye(2)
 
 '''Initialisierung der Distanzspeicherungsmatrix'''
@@ -156,7 +161,7 @@ for k in range(anz_messpunkte):
     if k == 15:
         print("RSS:", rss)
     x_est, p_mat = ekf_prediction(x_est, p_mat, q_mat)
-    x_est, p_mat = ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat)
+    x_est, p_mat = ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra)
 
     print "Die wirkliche Position ist: \n", x_n[k]
     print "Die geschaetzte Position ist: \n", x_est
@@ -207,7 +212,7 @@ x_est_fehler = [None]*len((x_est_x))
 for i in range(len(x_est_x)):
     x_est_fehler[i] = get_distance_1D(x_est_x[i], x_est_y[i])
 # plt.figure(figsize=(12, 12))
-plt.subplot(222)
+plt.subplot(243)
 plt.plot(range(1, (len(x_n)+1)), x_n_x)
 plt.plot(x_est_x)
 plt.plot(range(1, (len(x_n)+1)), x_n_y)
@@ -216,18 +221,23 @@ plt.xlabel('Messungsnummer', fontsize=20)
 plt.ylabel('Koordinate', fontsize=20)
 plt.legend(['Wahre Position X-Koordinate', 'Geschaetzte X-Koordinate',
             'Wahre Position Y-Koordinate', 'Geschaetzte Y-Korrdinate'], loc=0)
-plt.subplot(224)
-x_est_fehler = [None]*len((x_est_x))
-for i in range(1, len(x_n_x)):
+plt.subplot(247)
+x_est_fehler = [None]*len(x_est_x)
+for i in range(3, len(x_n_x)):
     x_est_fehler[i] = get_distance_1D(x_est_x[i], x_n_x[i-1])
 plt.plot(x_est_fehler)
-for i in range(1, len(x_n_y)):
+for i in range(3, len(x_n_y)):
     x_est_fehler[i] = get_distance_1D(x_est_y[i], x_n_y[i-1])
 plt.plot(x_est_fehler)
-for i in range(1, len(x_est_list)):
+for i in range(3, len(x_est_list)):
     x_est_fehler[i] = get_distance_2D(x_est_list[i], x_n[i-1])
 plt.plot(x_est_fehler)
+x_est_fehler_ges_mean = [np.mean(x_est_fehler[3:])]*len(x_est_x)
+plt.plot(x_est_fehler_ges_mean, '--')
 plt.xlabel('Messungsnummer', fontsize=20)
 plt.ylabel('Fehler', fontsize=20)
-plt.legend(['Fehler X-Koordinate', 'Fehler Y-Koordinate', '(Gesamt-) Abstandsfehler'], loc=0)
+plt.legend(['Fehler X-Koordinate', 'Fehler Y-Koordinate', '(Gesamt-) Abstandsfehler', 'Mittlerer Gesamtfehler'], loc=0)
+plt.subplot(248)
+plt.hist(x_est_fehler[3:], 60, (0, 60))
+plt.legend([ekf_param_Xtra])
 plt.show()
