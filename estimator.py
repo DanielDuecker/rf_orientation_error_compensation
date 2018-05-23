@@ -49,15 +49,15 @@ def get_angles(x_est, tx_pos, h_tx, z_mAUV, h_mAUV):
     return phi_cap, theta_cap, phi_low, theta_low
 
 
-def h_rss(x_pos_mobil, x_pos_stat, alpha, gamma):
+def h_rss(x_pos_mobil, x_pos_stat, alpha, gamma, theta_cap, phi_low, theta_low, n_tx, n_rec):
     r = get_distance_2D(x_pos_mobil, x_pos_stat)
-    rss = -20*np.log10(r)-r*alpha+gamma
+    rss = -20*np.log10(r)-r*alpha + gamma + 10*np.log10((np.cos(phi_low)**2) * (np.cos(theta_cap)**n_tx) * (np.cos(theta_cap + theta_low)**n_rec))
     return rss, r
 
 
-def h_rss_only(x_pos_mobil, x_pos_stat, alpha, gamma):
+def h_rss_only(x_pos_mobil, x_pos_stat, alpha, gamma, theta_cap, phi_low, theta_low, n_tx, n_rec):
     r = get_distance_2D(x_pos_mobil, x_pos_stat)
-    rss = -20*np.log10(r)-r*alpha+gamma
+    rss = -20*np.log10(r)-r*alpha + gamma + 10*np.log10((np.cos(phi_low)**2) * (np.cos(theta_cap)**n_tx) * (np.cos(theta_cap + theta_low)**n_rec))
     return rss
 
 
@@ -113,7 +113,7 @@ def ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra):
 Ausfuehrendes Programm:
 """
 
-np.random.seed(1281996)
+np.random.seed(12896)
 
 '''Konfiguration der Messpunkte'''
 dist_messpunkte = 25.0
@@ -149,9 +149,13 @@ tx_pos = [np.array([[-100.9], [-100.9]]), np.array([[500.9], [-100.9]]), np.arra
 '''Kennwerte der stationaeren Antenne(n)'''
 tx_alpha = np.array([0.01110, 0.01401, 0.01187, 0.01322, 0.01021, 0.01028])
 tx_gamma = np.array([-0.49471, -1.24823, -0.17291, -0.61587, 0.99831, 0.85711])
+tx_n = np.array([2, 2, 2, 2, 2, 2])
 
 '''Kennwerte der Rauschenden Abweichungen der Antennen'''
 tx_sigma = np.array([0.25, 0.25, 0.25, 0.25, 0.25, 0.25])
+
+'''Kennwerte der mobilen Antenne'''
+rec_n = 2
 
 '''Extra Unsicherheit fuer R-Matrix'''
 ekf_param_Xtra = 0
@@ -184,10 +188,8 @@ for k in range(anz_messpunkte):
     print "\n \n \nDurchlauf Nummer", k
 
     rss = np.empty(tx_num)
-    for i in range(tx_num):
+    for i in range(tx_num):  # "Messung" ff.
         rss[i] = h_rss_only(x_n[k], tx_pos[i], tx_alpha[i], tx_gamma[i]) + np.random.randn(1)*tx_sigma[i]
-    if k == 15:
-        print("RSS:", rss)
     x_est, p_mat = ekf_prediction(x_est, p_mat, q_mat)
     x_est, p_mat = ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra)
 
