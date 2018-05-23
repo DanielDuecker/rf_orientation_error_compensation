@@ -24,19 +24,19 @@ def get_distance_1D(x_a, x_b):
 
 # Vektor wird auf Ebene projeziert und Winkel mit main-Vektor gebildet
 def get_angle_v_on_plane(v_x, v_1main, v_2):
-    gamma_x = np.solve(np.array([[np.dot(v_2, v_2), np.dot(v_2, v_1main)],
-                              [np.dot(v_1main, v_2), np.dot(v_1main, v_1main)]]),
-                    np.array([[np.dot(v_x, v_2)], [np.dot(v_x, v_1main)]]))
+    g_mat = np.array([[np.dot(v_2.T, v_2)[0][0], np.dot(v_2.T, v_1main)[0][0]], [np.dot(v_1main.T, v_2)[0][0], np.dot(v_1main.T, v_1main)[0][0]]])
+    g_vec = np.array([[np.dot(v_x.T, v_2)[0][0]], [np.dot(v_x.T, v_1main)[0][0]]])
+    gamma_x = np.linalg.solve(g_mat, g_vec)
     v_x_proj = gamma_x[0]*v_2 + gamma_x[1]*v_1main
-    angle_x = np.arctan(np.dot(v_x_proj, v_1main) / (abs(v_x_proj) * abs(v_1main)))
+    angle_x = np.arctan(np.dot(v_x_proj.T, v_1main)[0][0] / (np.linalg.norm(v_x_proj) * np.linalg.norm(v_1main)))
     return angle_x
 
 
-def get_angles(x_est, tx_pos, h_tx, z_mAUV, h_mAUV):
+def get_angles(x_current, tx_pos, h_tx, z_mAUV, h_mAUV):
     dh = h_mAUV - h_tx
-    r = x_est - tx_pos
-    r_abs = abs(r)
-    phi_cap = np.arccos(r[0]/r_abs)
+    r = x_current - tx_pos
+    r_abs = np.linalg.norm(r)
+    phi_cap = np.arccos(r[0][0]/r_abs)
     if r[1] <= 0:
         phi_cap = 2*np.pi - phi_cap
     theta_cap = np.arctan(dh / r_abs)
@@ -95,10 +95,12 @@ def ekf_prediction(x_est, p_mat, q_mat):
     return x_est, p_mat
 
 
-def ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra):
+def ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra, txh, zmAUV, hmAUV, txn, recn):
     z_meas = rss
     for itx in range(tx_num):
-        y_est, r_dist = h_rss(x_est, tx_pos[itx], tx_alpha[itx], tx_gamma[itx])
+        phi_cap_itx, theta_cap_itx, phi_low_itx, theta_low_itx = get_angles(x_est, tx_pos[itx], txh[itx], zmAUV, hmAUV)
+        y_est, r_dist = h_rss(x_est, tx_pos[itx], tx_alpha[itx], tx_gamma[itx], theta_cap_itx, phi_low_itx, theta_low_itx,
+                              txn[itx], recn)
         y_tild = z_meas[itx] - y_est
         r_mat = measurement_covariance_model(z_meas[itx], r_dist, ekf_param_Xtra)
         h_jac_mat = h_rss_jacobi(x_est, tx_pos[itx], tx_alpha[itx])
@@ -135,8 +137,8 @@ while x_n[-1][1] > 0.0:
 anz_messpunkte = len(x_n)
 
 '''Konfiguration der Hoehe und der Antennenverdrehung durch Beschreibung des mobilen Antennenvektors'''
-h = 0
-z_MAUV_true = np.array([[0], [0], [10]])
+h_mAUV = 0
+z_mAUV = np.array([[10], [10], [10]])
 
 '''Bestimmung der Messfrequenzen'''
 tx_freq = [4.3400e+08, 4.341e+08, 4.3430e+08, 4.3445e+08, 4.3465e+08, 4.3390e+08]
@@ -150,9 +152,10 @@ tx_pos = [np.array([[-100.9], [-100.9]]), np.array([[500.9], [-100.9]]), np.arra
 tx_alpha = np.array([0.01110, 0.01401, 0.01187, 0.01322, 0.01021, 0.01028])
 tx_gamma = np.array([-0.49471, -1.24823, -0.17291, -0.61587, 0.99831, 0.85711])
 tx_n = np.array([2, 2, 2, 2, 2, 2])
+tx_h = np.array([0, 0, 0, 0, 0, 0])
 
 '''Kennwerte der Rauschenden Abweichungen der Antennen'''
-tx_sigma = np.array([0.25, 0.25, 0.25, 0.25, 0.25, 0.25])
+tx_sigma = np.array([0.33, 0.33, 0.33, 0.33, 0.33, 0.33])
 
 '''Kennwerte der mobilen Antenne'''
 rec_n = 2
@@ -189,9 +192,10 @@ for k in range(anz_messpunkte):
 
     rss = np.empty(tx_num)
     for i in range(tx_num):  # "Messung" ff.
-        rss[i] = h_rss_only(x_n[k], tx_pos[i], tx_alpha[i], tx_gamma[i]) + np.random.randn(1)*tx_sigma[i]
+        phi_cap_t, theta_cap_t, phi_low_t, theta_low_t = get_angles(x_n[k], tx_pos[i], tx_h[i], z_mAUV, h_mAUV)
+        rss[i] = h_rss_only(x_n[k], tx_pos[i], tx_alpha[i], tx_gamma[i], theta_cap_t, phi_low_t, theta_low_t, tx_n[i], rec_n) + np.random.randn(1)*tx_sigma[i]
     x_est, p_mat = ekf_prediction(x_est, p_mat, q_mat)
-    x_est, p_mat = ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra)
+    x_est, p_mat = ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra, tx_h, z_mAUV, h_mAUV, tx_n, rec_n)
 
     print "Die wirkliche Position ist: \n", x_n[k]
     print "Die geschaetzte Position ist: \n", x_est
