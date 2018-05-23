@@ -22,6 +22,33 @@ def get_distance_1D(x_a, x_b):
     return dist
 
 
+# Vektor wird auf Ebene projeziert und Winkel mit main-Vektor gebildet
+def get_angle_v_on_plane(v_x, v_1main, v_2):
+    gamma_x = np.solve(np.array([[np.dot(v_2, v_2), np.dot(v_2, v_1main)],
+                              [np.dot(v_1main, v_2), np.dot(v_1main, v_1main)]]),
+                    np.array([[np.dot(v_x, v_2)], [np.dot(v_x, v_1main)]]))
+    v_x_proj = gamma_x[0]*v_2 + gamma_x[1]*v_1main
+    angle_x = np.arctan(np.dot(v_x_proj, v_1main) / (abs(v_x_proj) * abs(v_1main)))
+    return angle_x
+
+
+def get_angles(x_est, tx_pos, h_tx, z_mAUV, h_mAUV):
+    dh = h_mAUV - h_tx
+    r = x_est - tx_pos
+    r_abs = abs(r)
+    phi_cap = np.arccos(r[0]/r_abs)
+    if r[1] <= 0:
+        phi_cap = 2*np.pi - phi_cap
+    theta_cap = np.arctan(dh / r_abs)
+    S_Ktx_KB = np.array([[np.cos(phi_cap)*np.cos(theta_cap), -np.sin(phi_cap), -np.cos(phi_cap)*np.sin(theta_cap)],
+                         [np.sin(phi_cap)*np.cos(theta_cap), np.cos(theta_cap), -np.sin(phi_cap)*np.sin(theta_cap)],
+                         [np.sin(theta_cap), 0, np.cos(theta_cap)]])
+    # Verdrehmatrix um z & phi, dann y & theta --- [0]=x_B.T, [1]=y_B.T, [2]=z_B.T
+    phi_low = get_angle_v_on_plane(z_mAUV, np.array(S_Ktx_KB[2])[np.newaxis].T, np.array(S_Ktx_KB[0])[np.newaxis].T)
+    theta_low = get_angle_v_on_plane(z_mAUV, np.array(S_Ktx_KB[2])[np.newaxis].T, np.array(S_Ktx_KB[1])[np.newaxis].T)
+    return phi_cap, theta_cap, phi_low, theta_low
+
+
 def h_rss(x_pos_mobil, x_pos_stat, alpha, gamma):
     r = get_distance_2D(x_pos_mobil, x_pos_stat)
     rss = -20*np.log10(r)-r*alpha+gamma
@@ -46,7 +73,7 @@ def measurement_covariance_model(rss_noise_model, r_dist, ekf_param_Xtra):
     ekf_param = [6.5411, 7.5723, 9.5922, 11.8720, 21.6396, 53.6692, 52.0241]
     r_sig = 50.0 + ekf_param_Xtra  # default (Fuer RSS zwischen -35 und -55 z.Z.)
     if -35 < rss_noise_model or r_dist >= 1900:
-        r_sig = 100  + ekf_param_Xtra
+        r_sig = 100 + ekf_param_Xtra
     else:
         if rss_noise_model >= -55:
             r_sig = ekf_param[0] + ekf_param_Xtra
@@ -107,8 +134,9 @@ while x_n[-1][1] > 0.0:
     x_n.append(start_messpunkte)
 anz_messpunkte = len(x_n)
 
-'''Konfiguration der Winkel'''
-
+'''Konfiguration der Hoehe und der Antennenverdrehung durch Beschreibung des mobilen Antennenvektors'''
+h = 0
+z_MAUV_true = np.array([[0], [0], [10]])
 
 '''Bestimmung der Messfrequenzen'''
 tx_freq = [4.3400e+08, 4.341e+08, 4.3430e+08, 4.3445e+08, 4.3465e+08, 4.3390e+08]
@@ -123,7 +151,7 @@ tx_alpha = np.array([0.01110, 0.01401, 0.01187, 0.01322, 0.01021, 0.01028])
 tx_gamma = np.array([-0.49471, -1.24823, -0.17291, -0.61587, 0.99831, 0.85711])
 
 '''Kennwerte der Rauschenden Abweichungen der Antennen'''
-tx_sigma = np.array([0.5, 0.5, 0.5, 0.5, 0.5, 0.5])
+tx_sigma = np.array([0.25, 0.25, 0.25, 0.25, 0.25, 0.25])
 
 '''Extra Unsicherheit fuer R-Matrix'''
 ekf_param_Xtra = 0
@@ -170,6 +198,10 @@ for k in range(anz_messpunkte):
     x_est_list.append(x_est)
 
 print('\nFertich!\n')
+
+'''
+Plotting
+'''
 
 '''Erstellung der X und Y Koordinatenlisten zum einfachen und effizienteren Plotten'''
 x_n_x = [None]*len(x_n)
