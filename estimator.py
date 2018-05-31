@@ -28,12 +28,12 @@ def get_angle_v_on_plane(v_x, v_1main, v_2):
     g_vec = np.array([[np.dot(v_x.T, v_2)[0][0]], [np.dot(v_x.T, v_1main)[0][0]]])
     gamma_x = np.linalg.solve(g_mat, g_vec)
     v_x_proj = gamma_x[0]*v_2 + gamma_x[1]*v_1main
-    angle_x = np.arctan(np.dot(v_x_proj.T, v_1main)[0][0] / (np.linalg.norm(v_x_proj) * np.linalg.norm(v_1main)))
+    angle_x = np.arccos(np.dot(v_x_proj.T, v_1main)[0][0] / (np.linalg.norm(v_x_proj) * np.linalg.norm(v_1main)))
     return angle_x
 
 
-def get_angles(x_current, tx_pos, h_tx, z_mAUV, h_mAUV):
-    dh = h_mAUV - h_tx
+def get_angles(x_current, tx_pos, h_tx, z_mauv, h_mauv):
+    dh = h_mauv - h_tx
     r = x_current - tx_pos
     r_abs = np.linalg.norm(r)
     phi_cap = np.arccos(r[0][0]/r_abs)
@@ -41,23 +41,23 @@ def get_angles(x_current, tx_pos, h_tx, z_mAUV, h_mAUV):
         phi_cap = 2*np.pi - phi_cap
     theta_cap = np.arctan(dh / r_abs)
     S_Ktx_KB = np.array([[np.cos(phi_cap)*np.cos(theta_cap), -np.sin(phi_cap), -np.cos(phi_cap)*np.sin(theta_cap)],
-                         [np.sin(phi_cap)*np.cos(theta_cap), np.cos(theta_cap), -np.sin(phi_cap)*np.sin(theta_cap)],
-                         [np.sin(theta_cap), 0, np.cos(theta_cap)]])
+                         [np.sin(phi_cap)*np.cos(theta_cap), np.cos(phi_cap), -np.sin(phi_cap)*np.sin(theta_cap)],
+                         [np.sin(theta_cap), 0, np.cos(theta_cap)]]).T
     # Verdrehmatrix um z & phi, dann y & theta --- [0]=x_B.T, [1]=y_B.T, [2]=z_B.T
-    phi_low = get_angle_v_on_plane(z_mAUV, np.array(S_Ktx_KB[2])[np.newaxis].T, np.array(S_Ktx_KB[0])[np.newaxis].T)
-    theta_low = get_angle_v_on_plane(z_mAUV, np.array(S_Ktx_KB[2])[np.newaxis].T, np.array(S_Ktx_KB[1])[np.newaxis].T)
+    phi_low = get_angle_v_on_plane(z_mauv, np.array(S_Ktx_KB[2])[np.newaxis].T, np.array(S_Ktx_KB[0])[np.newaxis].T)            # <---------------
+    theta_low = get_angle_v_on_plane(z_mauv, np.array(S_Ktx_KB[2])[np.newaxis].T, np.array(S_Ktx_KB[1])[np.newaxis].T)
     return phi_cap, theta_cap, phi_low, theta_low
 
 
-def h_rss(x_pos_mobil, x_pos_stat, alpha, gamma, theta_cap, phi_low, theta_low, n_tx, n_rec):
+def h_rss_model(x_pos_mobil, x_pos_stat, alpha, gamma, theta_cap, phi_low, theta_low, n_tx, n_rec):
     r = get_distance_2D(x_pos_mobil, x_pos_stat)
     rss = -20*np.log10(r)-r*alpha + gamma + 10*np.log10((np.cos(phi_low)**2) * (np.cos(theta_cap)**n_tx) * (np.cos(theta_cap + theta_low)**n_rec))
     return rss, r
 
 
-def h_rss_only(x_pos_mobil, x_pos_stat, alpha, gamma, theta_cap, phi_low, theta_low, n_tx, n_rec):
+def h_rss_messungsemulator(x_pos_mobil, x_pos_stat, alpha, gamma, theta_cap, phi_low, theta_low, n_tx, n_rec):
     r = get_distance_2D(x_pos_mobil, x_pos_stat)
-    rss = -20*np.log10(r)-r*alpha + gamma + 10*np.log10((np.cos(phi_low)**2) * (np.cos(theta_cap)**n_tx) * (np.cos(theta_cap + theta_low)**n_rec))
+    rss = -20*np.log10(r)-r*alpha + gamma  # + 10*np.log10((np.cos(phi_low)**2) * (np.cos(theta_cap)**n_tx) * (np.cos(theta_cap + theta_low)**n_rec))
     return rss
 
 
@@ -70,6 +70,9 @@ def h_rss_jacobi(x_pos_mobil, x_pos_stat, alpha):
 
 
 def measurement_covariance_model(rss_noise_model, r_dist, ekf_param_Xtra):
+    
+    ''' EVTL HIER NOCH ERWEITERUNG DES MODELLS MIT WINKELUNSICHERHEIT '''
+    
     ekf_param = [6.5411, 7.5723, 9.5922, 11.8720, 21.6396, 53.6692, 52.0241]
     r_sig = 50.0 + ekf_param_Xtra  # default (Fuer RSS zwischen -35 und -55 z.Z.)
     if -35 < rss_noise_model or r_dist >= 1900:
@@ -95,11 +98,11 @@ def ekf_prediction(x_est, p_mat, q_mat):
     return x_est, p_mat
 
 
-def ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra, txh, zmAUV, hmAUV, txn, recn):
+def ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra, txh, zmauv, hmauv, txn, recn):
     z_meas = rss
     for itx in range(tx_num):
-        phi_cap_itx, theta_cap_itx, phi_low_itx, theta_low_itx = get_angles(x_est, tx_pos[itx], txh[itx], zmAUV, hmAUV)
-        y_est, r_dist = h_rss(x_est, tx_pos[itx], tx_alpha[itx], tx_gamma[itx], theta_cap_itx, phi_low_itx, theta_low_itx,
+        phi_cap_itx, theta_cap_itx, phi_low_itx, theta_low_itx = get_angles(x_est, tx_pos[itx], txh[itx], zmauv, hmauv)
+        y_est, r_dist = h_rss_model(x_est, tx_pos[itx], tx_alpha[itx], tx_gamma[itx], theta_cap_itx, phi_low_itx, theta_low_itx,
                               txn[itx], recn)
         y_tild = z_meas[itx] - y_est
         r_mat = measurement_covariance_model(z_meas[itx], r_dist, ekf_param_Xtra)
@@ -137,8 +140,8 @@ while x_n[-1][1] > 0.0:
 anz_messpunkte = len(x_n)
 
 '''Konfiguration der Hoehe und der Antennenverdrehung durch Beschreibung des mobilen Antennenvektors'''
-h_mAUV = 0
-z_mAUV = np.array([[10], [10], [10]])
+h_mauv = 0
+z_mauv = np.array([[100], [0], [100]])
 
 '''Bestimmung der Messfrequenzen'''
 tx_freq = [4.3400e+08, 4.341e+08, 4.3430e+08, 4.3445e+08, 4.3465e+08, 4.3390e+08]
@@ -192,10 +195,10 @@ for k in range(anz_messpunkte):
 
     rss = np.empty(tx_num)
     for i in range(tx_num):  # "Messung" ff.
-        phi_cap_t, theta_cap_t, phi_low_t, theta_low_t = get_angles(x_n[k], tx_pos[i], tx_h[i], z_mAUV, h_mAUV)
-        rss[i] = h_rss_only(x_n[k], tx_pos[i], tx_alpha[i], tx_gamma[i], theta_cap_t, phi_low_t, theta_low_t, tx_n[i], rec_n) + np.random.randn(1)*tx_sigma[i]
+        phi_cap_t, theta_cap_t, phi_low_t, theta_low_t = get_angles(x_n[k], tx_pos[i], tx_h[i], z_mauv, h_mauv)
+        rss[i] = h_rss_messungsemulator(x_n[k], tx_pos[i], tx_alpha[i], tx_gamma[i], theta_cap_t, phi_low_t, theta_low_t, tx_n[i], rec_n) + np.random.randn(1)*tx_sigma[i]
     x_est, p_mat = ekf_prediction(x_est, p_mat, q_mat)
-    x_est, p_mat = ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra, tx_h, z_mAUV, h_mAUV, tx_n, rec_n)
+    x_est, p_mat = ekf_update(rss, tx_pos, tx_alpha, tx_gamma, x_est, p_mat, ekf_param_Xtra, tx_h, z_mauv, h_mauv, tx_n, rec_n)
 
     print "Die wirkliche Position ist: \n", x_n[k]
     print "Die geschaetzte Position ist: \n", x_est
