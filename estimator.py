@@ -28,7 +28,7 @@ def get_angle_v_on_plane(v_x, v_1main, v_2):
     g_vec = np.array([[np.dot(v_x.T, v_2)[0][0]], [np.dot(v_x.T, v_1main)[0][0]]])
     gamma_x = np.linalg.solve(g_mat, g_vec)
     v_x_proj = gamma_x[0]*v_2 + gamma_x[1]*v_1main
-    angle_x = np.arccos(np.dot(v_x_proj.T, v_1main)[0][0] / (np.linalg.norm(v_x_proj) * np.linalg.norm(v_1main)))
+    angle_x = np.arccos((np.dot(v_x_proj.T, v_1main)[0][0] / (np.linalg.norm(v_x_proj) * np.linalg.norm(v_1main)))-1e-10)  # -1e-10, da PC etwas mehr als 1 ausrechnet und daher arccos nicht funktioniert.
     return angle_x
 
 
@@ -44,7 +44,7 @@ def get_angles(x_current, tx_pos, h_tx, z_mauv, h_mauv):
                          [np.sin(phi_cap)*np.cos(theta_cap), np.cos(phi_cap), -np.sin(phi_cap)*np.sin(theta_cap)],
                          [np.sin(theta_cap), 0, np.cos(theta_cap)]]).T
     # Verdrehmatrix um z & phi, dann y & theta --- [0]=x_B.T, [1]=y_B.T, [2]=z_B.T
-    phi_low = get_angle_v_on_plane(z_mauv, np.array(S_Ktx_KB[2])[np.newaxis].T, np.array(S_Ktx_KB[0])[np.newaxis].T)            # <---------------
+    phi_low = get_angle_v_on_plane(z_mauv, np.array(S_Ktx_KB[2])[np.newaxis].T, np.array(S_Ktx_KB[0])[np.newaxis].T)
     theta_low = get_angle_v_on_plane(z_mauv, np.array(S_Ktx_KB[2])[np.newaxis].T, np.array(S_Ktx_KB[1])[np.newaxis].T)
     return phi_cap, theta_cap, phi_low, theta_low
 
@@ -57,7 +57,7 @@ def h_rss_model(x_pos_mobil, x_pos_stat, alpha, gamma, theta_cap, phi_low, theta
 
 def h_rss_messungsemulator(x_pos_mobil, x_pos_stat, alpha, gamma, theta_cap, phi_low, theta_low, n_tx, n_rec):
     r = get_distance_2D(x_pos_mobil, x_pos_stat)
-    rss = -20*np.log10(r)-r*alpha + gamma  # + 10*np.log10((np.cos(phi_low)**2) * (np.cos(theta_cap)**n_tx) * (np.cos(theta_cap + theta_low)**n_rec))
+    rss = -20*np.log10(r)-r*alpha + gamma #+ 10*np.log10((np.cos(phi_low)**2) * (np.cos(theta_cap)**n_tx) * (np.cos(theta_cap + theta_low)**n_rec))
     return rss
 
 
@@ -140,8 +140,8 @@ while x_n[-1][1] > 0.0:
 anz_messpunkte = len(x_n)
 
 '''Konfiguration der Hoehe und der Antennenverdrehung durch Beschreibung des mobilen Antennenvektors'''
-h_mauv = 0
-z_mauv = np.array([[100], [0], [100]])
+h_mauv = 100
+z_mauv = np.array([[0], [0], [100]])
 
 '''Bestimmung der Messfrequenzen'''
 tx_freq = [4.3400e+08, 4.341e+08, 4.3430e+08, 4.3445e+08, 4.3465e+08, 4.3390e+08]
@@ -193,7 +193,7 @@ x_est_list = [x_est]
 for k in range(anz_messpunkte):
     print "\n \n \nDurchlauf Nummer", k
 
-    rss = np.empty(tx_num)
+    rss = np.zeros(tx_num)
     for i in range(tx_num):  # "Messung" ff.
         phi_cap_t, theta_cap_t, phi_low_t, theta_low_t = get_angles(x_n[k], tx_pos[i], tx_h[i], z_mauv, h_mauv)
         rss[i] = h_rss_messungsemulator(x_n[k], tx_pos[i], tx_alpha[i], tx_gamma[i], theta_cap_t, phi_low_t, theta_low_t, tx_n[i], rec_n) + np.random.randn(1)*tx_sigma[i]
