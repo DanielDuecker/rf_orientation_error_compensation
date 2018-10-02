@@ -231,7 +231,7 @@ def get_angles(x_current, tx_pos, h_tx, z_mauv, h_mauv):
 
 def h_rss_model(x_pos_mobil, h_mobil, x_pos_stat, h_stat, lambda_ti, gamma_ti, theta_cap, psi_low, theta_low, n_tx, n_rec, d_r, d_t):
     r = get_distance_3D(x_pos_mobil, h_mobil, x_pos_stat, h_stat)
-    rss1 = -20*np.log10(r)+r*lambda_ti + gamma_ti #+ np.log10(abs(np.cos(psi_low))) + n_tx * np.log10(abs(np.cos(theta_cap))) + n_rec * np.log10(abs(np.cos(theta_cap + theta_low)))
+    rss1 = -20*np.log10(r)+r*lambda_ti + gamma_ti + np.log10(abs(np.cos(psi_low))) + n_tx * np.log10(abs(np.cos(theta_cap))) + n_rec * np.log10(abs(np.cos(theta_cap + theta_low)))
     # rss1 = -20*np.log10(r)+r*lambda_ti + gamma_ti + 2 * n_tx * np.log10(abs(np.cos(theta_cap)))
     # rss1 = -20 * np.log10(r) + r * lambda_ti + gamma_ti + np.log10((np.cos(psi_low) ** 2) * d_r * (np.cos(theta_cap) ** n_tx) * d_t * (np.cos(theta_cap + theta_low) ** n_rec))
     # rss2 = -20*np.log10(r)+r*lambda_ti + gamma_ti
@@ -244,7 +244,7 @@ def h_rss_messungsemulator(x_pos_mobil, h_mobil, x_pos_stat, h_stat, lambda_ti, 
     # rss = -20*np.log10(r)+r*lambda_ti + gamma_ti + np.log10((np.cos(psi_low)**2) * d_r * (np.cos(theta_cap)**n_tx) * d_t * (np.cos(theta_cap + theta_low)**n_rec))
     rss = -20 * np.log10(r) + r * lambda_ti + gamma_ti + np.log10(np.cos(psi_low)) + n_tx * np.log10(np.cos(theta_cap)) + n_rec * np.log10(np.cos(theta_cap + theta_low))
     tx_sigma = measurement_noise_model(r, theta_cap, psi_low, theta_low)
-    return rss + np.random.randn(1)*tx_sigma
+    return rss  # + np.random.randn(1)*tx_sigma
 
 
 def h_rss_jacobi(x_pos_mobil, h_mobil, x_pos_stat, h_stat, lambda_t, gamma_t, theta_cap, psi_low, theta_low, n_tx, n_rec, d_r, d_t):
@@ -288,9 +288,9 @@ def measurement_covariance_model(rss_noise_model, r_dist_tot, phi_cap, theta_cap
     if theta_cap != 0.0:
         r_sig += abs(theta_cap)**2 * 15
     if theta_low != 0.0:
-        r_sig += abs(theta_low)**2 * 60
+        r_sig += abs(theta_low)**2 * 8
     if psi_low != 0.0:
-        r_sig += abs(psi_low)**2 * 60
+        r_sig += abs(psi_low)**2 * 8
 
     r_mat = r_sig ** 2
     return r_mat
@@ -330,7 +330,7 @@ Ausfuehrendes Programm:
 np.random.seed(12896)
 
 '''Konfiguration der Messpunkte'''
-dist_messpunkte = 40.0
+dist_messpunkte = 50.0
 start_messpunkte = np.array([[800.0], [700.0]])
 start_messpunkt = start_messpunkte
 mittel_messpunkt = np.array([[2600], [900]])
@@ -351,10 +351,10 @@ while x_n[-1][1] > start_messpunkt[1][0]:
 anz_messpunkte = len(x_n)
 
 '''Konfiguration der Hoehe und der Antennenverdrehung durch Beschreibung des mobilen Antennenvektors'''
-h_mauv = 0.0
+h_mauv = 500.0
 # z_mauv = np.array([[0], [0.34202014332], [0.93969262078]])
-# z_mauv = np.array([[0.0], [0.0], [100.0]])
-z_mauv = np.array([[0.0], [0.64278760968], [0.76604444311]])
+z_mauv = np.array([[0.0], [0.0], [100.0]])
+# z_mauv = np.array([[0.0], [0.64278760968], [0.76604444311]])
 
 '''Bestimmung der Messfrequenzen'''
 tx_freq = [4.3400e+08, 4.341e+08, 4.3430e+08, 4.3445e+08, 4.3465e+08, 4.3390e+08]
@@ -363,8 +363,8 @@ tx_num = len(tx_freq)
 '''Postion(en) der stationaeren Antenne(n)'''
 tx_pos = [np.array([[770], [432]]), np.array([[1794], [437]]), np.array([[2814], [447]]),
           np.array([[2824], [1232]]), np.array([[1789], [1237]]), np.array([[774], [1227]])]
-# tx_h = np.array([600, 600, 600, 600, 600, 600])
-tx_h = np.array([0, 0, 0, 0, 0, 0])
+tx_h = np.array([600, 600, 600, 600, 600, 600])
+# tx_h = np.array([0, 0, 0, 0, 0, 0])
 '''
 Old simulation values
 tx_pos = [np.array([[-100.9], [-100.9]]), np.array([[500.9], [-100.9]]), np.array([[1100.9], [-100.9]]),
@@ -372,7 +372,7 @@ tx_pos = [np.array([[-100.9], [-100.9]]), np.array([[500.9], [-100.9]]), np.arra
 '''
 
 '''Berechnung von n und D'''
-hpbw = 18.0  # 13.0
+hpbw = 30.0  # 13.0
 hpbwrad = hpbw * np.pi/180
 antenna_D = -172.4 + 191*np.sqrt(0.818+(1.0/hpbw))
 antenna_n = np.log(0.5)/np.log(np.cos(hpbwrad*0.5))
@@ -385,10 +385,10 @@ antenna_n = np.log(0.5)/np.log(np.cos(hpbwrad*0.5))
 # lambda_t = np.array([-0.0122592, -0.0133184, -0.0116281, -0.0084964, -0.0052658, -0.0101449])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
 # gamma_t = np.array([-1.1498, -1.3026, -5.4327, -8.9789, -14.9785, -11.5166])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
 # rx_n = np.array([0.0, 0.0, 0.0, 538.7847, 455.5131, 241.7673])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
-lambda_t = np.array([-0.0122592, -0.0133184, -0.0116281, -0.0086027, -0.005105, -0.0101493])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
-gamma_t = np.array([-1.1498, -1.3026, -5.4327, -8.5642, -14.8324, -11.419])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
-tx_n = np.array([0.0, 0.0, 0.0, 125.1575, 104.4862, 55.1389])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
-rx_n = np.array([0.0, 0.0, 0.0, 125.1575, 104.4862, 55.1389])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
+# lambda_t = np.array([-0.0122592, -0.0133184, -0.0116281, -0.0086027, -0.005105, -0.0101493])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
+# gamma_t = np.array([-1.1498, -1.3026, -5.4327, -8.5642, -14.8324, -11.419])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
+# tx_n = np.array([0.0, 0.0, 0.0, 125.1575, 104.4862, 55.1389])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
+# rx_n = np.array([0.0, 0.0, 0.0, 125.1575, 104.4862, 55.1389])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt
 
 # lambda_t = np.array([-0.0081804, -0.0085223, -0.0071169, -0.0075742, -0.0081103, -0.0107429])  # 08 10 d50d50d25 400-600
 # gamma_t = np.array([-8.3125, -8.964, -13.0345, -10.5543, -11.7495, -6.401])  # 08 10 d50d50d25 400-600
@@ -442,8 +442,8 @@ rx_n = np.array([0.0, 0.0, 0.0, 125.1575, 104.4862, 55.1389])  # /home/jonas/src
 # gamma_t = np.array([-11.5789, -9.8993, -14.2663, -10.1378, -13.2802, -3.2576])  # 07 31 d20
 # tx_n = [antenna_n]*6  # Normal
 
-# lambda_t = np.array([-0.0108059, -0.0102862, -0.0095051, -0.0086124, -0.0086001, -0.0118771])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_10_grid_meas_d505025_measurement_shortened.txt 18
-# gamma_t = np.array([-2.465, -4.7777, -7.358, -6.9102, -8.412, -3.2815])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_10_grid_meas_d505025_measurement_shortened.txt 18
+lambda_t = np.array([-0.0108059, -0.0102862, -0.0095051, -0.0086124, -0.0086001, -0.0118771])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_10_grid_meas_d505025_measurement_shortened.txt 18
+gamma_t = np.array([-2.465, -4.7777, -7.358, -6.9102, -8.412, -3.2815])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_10_grid_meas_d505025_measurement_shortened.txt 18
 # lambda_t = np.array([-0.0108059, -0.0102862, -0.0095051, -0.0086124, -0.0086001, -0.0118771])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_10_grid_meas_d505025_measurement_shortened.txt 46
 # gamma_t = np.array([-1.7309, -4.0436, -6.6239, -6.176, -7.6779, -2.5474])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_10_grid_meas_d505025_measurement_shortened.txt 46
 # lambda_t = np.array([-0.0108059, -0.0102862, -0.0095051, -0.0086124, -0.0086001, -0.0118771])  # /home/jonas/src/rf_localization/Grid Measurements/wp_list_2018_08_10_grid_meas_d505025_measurement_shortened.txt 29
@@ -451,11 +451,11 @@ rx_n = np.array([0.0, 0.0, 0.0, 125.1575, 104.4862, 55.1389])  # /home/jonas/src
 
 # lambda_t = np.array([-0.0108, -0.0103, -0.0095, -0.0086, -0.0086, -0.0119])  # 08 10 d50
 # gamma_t = np.array([-1.4025, -3.7152, -6.2955, -5.8476, -7.3495, -2.219])  # 08 15 d50
-# tx_n = [antenna_n]*6  # Normal
+tx_n = [antenna_n]*6  # Normal
 
 directivities_t = [antenna_D] * 6  # Normal
 '''Kennwerte der mobilen Antenne'''
-# rx_n = [antenna_n]*6  # Normal
+rx_n = [antenna_n]*6  # Normal
 directivity_r = antenna_D
 
 '''Initialisierung der P-Matrix (Varianz der Position)'''
@@ -494,7 +494,7 @@ theta_low_t = [0.0]*tx_num
 messung_benutzen = True
 if messung_benutzen:
     '''Laden der Messdatei'''
-    plotdata_mat = analyze_measdata_from_file(measfilename='wp_list_2018_08_03_grid_meas_0deg_d20_2sec_no1_measurement_40deg.txt')
+    plotdata_mat = analyze_measdata_from_file(measfilename='wp_list_2018_08_10_grid_meas_d505025_measurement_h500.txt')
 
 extra_plotting = False
 direct_terms = [0.0] * tx_num
@@ -595,6 +595,7 @@ for k in range(anz_messpunkte):
         ekf_plotter.update_meas_circles(msg_z_meas, lambda_t, gamma_t, direct_terms, msg_y_est, b_plot_yest=False)
         ekf_plotter.plot_ekf_pos_live(b_yaw=False, b_next_wp=True)
         plt.show()  # Hier Breakpoint hinsetzen fuer Analyse der punkte
+        # plt.pause(1)
 
 print('\nFertich!\n')
 
